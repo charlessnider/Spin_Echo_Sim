@@ -1590,7 +1590,11 @@ __global__ void calc_H(float alpha_x, float alpha_y, float alpha_z, float t, flo
         // SECOND ORDER TERM //
 
             // terms we need
-            float eta = __fdiv_rn(__fsub_rn(alpha_x, alpha_y), alpha); // anisotropy factor
+            float eta = 0;
+            if (alpha != 0)
+            {
+                eta = __fdiv_rn(__fsub_rn(alpha_x, alpha_y), alpha); // anisotropy factor
+            }
             float alpha2 = __fmul_rn(alpha, alpha); // alpha squared
             cuFloatComplex wp2 = my_cuCmulf(wp, wp); // wp * wp
             cuFloatComplex wp2bar = my_cuCmulf(cuConjf(wp), cuConjf(wp)); // conj(wp) * conj(wp)
@@ -1916,7 +1920,11 @@ __global__ void ham_hilbert_to_liouville(cuFloatComplex* H, cuFloatComplex* H_L,
 
             // terms we need
             float alpha = __fadd_rn(alpha_x, alpha_y);
-            float eta = __fdiv_rn(__fsub_rn(alpha_x, alpha_y), alpha);
+            float eta = 0;
+            if (alpha != 0)
+            {
+                eta = __fdiv_rn(__fsub_rn(alpha_x, alpha_y), alpha); // anisotropy factor
+            }
             cuFloatComplex w = M_loc[idx];
             cuFloatComplex wbar = cuConjf(w);
             cuFloatComplex G1 = make_cuFloatComplex(__fadd_rn(gamma1, __fadd_rn(gamma2, gamma3)), 0.0f); // gamma1 + gamma2 + gamma3 (elements 21, 31, 24, 34)
