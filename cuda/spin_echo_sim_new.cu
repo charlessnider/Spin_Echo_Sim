@@ -330,7 +330,7 @@ int main(int argc, char* argv[])
                 generate_new_freqs(x);
                 cudaDeviceSynchronize();
                 end_clock(begin, end, t_output, time_exec);
-                write_to_file_f(freqs_output, x.h_v, err_check_f, x.nf, error_check, t_idx, num_err);
+                write_to_file_f(freqs_output, x.v, err_check_f, x.nf, error_check, t_idx, num_err);
             }
 
             start_clock(begin, time_exec);
@@ -435,7 +435,7 @@ int main(int argc, char* argv[])
             calc_stencil_2D(x.h_M_stencil, xi, p, stencil_form, s_w, p_w, d_w, x.nx, x.ny);
             end_clock(begin, end, t_output, time_exec);
 
-            // copy stencil to device
+            // copy stencils to device
             start_clock(begin, time_exec);
             cudaMemcpy(x.M_stencil, x.h_M_stencil, x.nf * sizeof(cuFloatComplex), cudaMemcpyHostToDevice);
             cudaDeviceSynchronize();
@@ -801,7 +801,7 @@ dataStruct prepare_dataStruct(int t_nx, int t_ny, float t_dt, float t_tau, float
     cudaMalloc(&x.M_loc_z, x.nf * sizeof(cuFloatComplex));         
     cudaMalloc(&x.M, (3 * x.nt + 2) * sizeof(cuFloatComplex));
     cudaMalloc(&x.Mz, (3 * x.nt + 2) * sizeof(cuFloatComplex));          
-    cudaMalloc(&x.M_stencil, x.nf * sizeof(cuFloatComplex));        
+    cudaMalloc(&x.M_stencil, x.nf * sizeof(cuFloatComplex));         
     cudaMalloc(&x.U90, DIM_H * DIM_H * sizeof(cuFloatComplex));  
     cudaMalloc(&x.U180, DIM_H * DIM_H * sizeof(cuFloatComplex));  
     cudaMalloc(&x.v, x.nf * sizeof(float));       
@@ -1447,17 +1447,17 @@ void calc_stencil_2D(cuFloatComplex* h_M_stencil, float xi, float p, int func, f
             float ang_fac = s_w + p_w * cosf(theta) + d_w * cosf(2.0 * theta);
             float r = sqrt(powf(x, 2) + powf(y, 2));
 
-            if (func == 0)
+            if (func == 0 || func == 3)
             {
                 float sten = expf(-powf(r/xi, p));
                 h_M_stencil[ny * i + j] = make_cuFloatComplex(sten, 0);
             }
-            else if (func == 1)
+            else if (func == 1 || func == 4)
             {
                 float sten = ang_fac / powf(r, p);
                 h_M_stencil[ny * i + j] = make_cuFloatComplex(sten, 0);
             }
-            else if (func == 2)
+            else if (func == 2 || func == 5)
             {
                 float xh = 2.0 * (r / xi);
                 float sten = (ang_fac / powf(xh, 4)) * (xh * cosf(xh) - sin(xh));
@@ -1473,6 +1473,33 @@ void calc_stencil_2D(cuFloatComplex* h_M_stencil, float xi, float p, int func, f
 
     // no self coupling
     h_M_stencil[0] = make_cuFloatComplex(0, 0);
+
+    /*
+    // if scaled global, adjust
+    if (func == 3 || func == 4 || func == 5)
+    {
+        float sten = 0.0;
+        for (int i = 0; i < nx; i++)
+        {
+            for (int j = 0; j < ny; j++)
+            {
+                sten = sten + cuCrealf(h_M_stencil[ny * i + j]);
+            }
+        }
+
+        // divide out
+        sten = 1.0 / sten;
+
+        for (int i = 0; i < nx; i++)
+        {
+            for (int j = 0; j < ny; j++)
+            {
+                h_M_stencil[ny * i + j] = make_cuFloatComplex(sten, 0.0f);
+            }
+        } 
+
+    }
+    */
 }
 
 
@@ -1493,6 +1520,8 @@ void calc_stencil_2D(cuFloatComplex* h_M_stencil, float xi, float p, int func, f
 //                ##       ##     ## ##   ### ##    ##    ##     ##  ##     ## ##   ### ##    ##                        //
 //                ##        #######  ##    ##  ######     ##    ####  #######  ##    ##  ######                         //
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// EXACT HAMILTONIAN WITH ALL TIME DEPENDENCE
 
 /*
 __global__ void calc_H(float alpha_x, float alpha_y, float alpha_z, float t, float* v, float dt, int nf, cuFloatComplex* M_loc, cuFloatComplex* M_loc_z, cuFloatComplex* H)
@@ -1541,6 +1570,7 @@ __global__ void calc_H(float alpha_x, float alpha_y, float alpha_z, float t, flo
 }
 */
 
+// MAGNUS HAMILTONIAN
 __global__ void calc_H(float alpha_x, float alpha_y, float alpha_z, float t, float* v, float dt, int nf, cuFloatComplex* M_loc, cuFloatComplex* M_loc_z, cuFloatComplex* H)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1607,135 +1637,49 @@ __global__ void calc_H(float alpha_x, float alpha_y, float alpha_z, float t, flo
             cuFloatComplex By = make_cuFloatComplex(__fmul_rn(-1.0f, __fmul_rn(__fdiv_rn(__fmul_rn(eta, __fmul_rn(alpha, dv_az)), __fmul_rn(4.0f, v0)), wy)), 0.0f);
 
             // multiply z term by 1/2 and add (11), subtract (22)
-            H[DIM_H * DIM_H * idx]     = my_cuCaddf(H[DIM_H * DIM_H * idx], my_cuCmulf(rp5, Bz)); // (1/2)*(dv + Az)
-            H[DIM_H * DIM_H * idx + 3] = my_cuCsubf(H[DIM_H * DIM_H * idx + 3], my_cuCmulf(rp5, Bz)); // -(1/2)*(dv + Az)
+            H[DIM_H * DIM_H * idx]     = my_cuCaddf(H[DIM_H * DIM_H * idx], my_cuCmulf(rp5, Bz)); // (1/2)*Bz
+            H[DIM_H * DIM_H * idx + 3] = my_cuCsubf(H[DIM_H * DIM_H * idx + 3], my_cuCmulf(rp5, Bz)); // -(1/2)*Bz
             
             // multiply x term by 1/2 and add (12), (21)
-            H[DIM_H * DIM_H * idx + 1] = my_cuCaddf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(rp5, Bx)); // (1/2)*Ax
-            H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(rp5, Bx)); // (1/2)*Ax
+            H[DIM_H * DIM_H * idx + 1] = my_cuCaddf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(rp5, Bx)); // (1/2)*Bx
+            H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(rp5, Bx)); // (1/2)*Bx
 
             // multiply y term by i/2 and sub (12), add (21)
-            H[DIM_H * DIM_H * idx + 1] = my_cuCsubf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(ip5, By)); // -(i/2)*Ay
-            H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(ip5, By)); // (i/2)*Ay
-
-    }
-}
-
-/*
-__global__ void calc_H(float alpha_x, float alpha_y, float alpha_z, float t, float* v, float dt, int nf, cuFloatComplex* M_loc, cuFloatComplex* M_loc_z, cuFloatComplex* H)
-{
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < nf)
-    {
-
-        // ignoring all gammas because they cancel just so to give only one factor that is absorbed into time evolution
-
-        // H = -(v - v0)Iz - alpha_x Ix<Mx> - alpha_y Iy<My> - alpha_z Iz<Mz>
-
-        // generic terms
-        float Mx = cuCrealf(M_loc[idx]); // local Mx
-        float My = cuCimagf(M_loc[idx]); // local My
-        float dv = __fsub_rn(v[idx], v0); // vi - v0
-        cuFloatComplex rp5 = make_cuFloatComplex(0.5f, 0.0f); // one half as complex (real)
-        cuFloatComplex ip5 = make_cuFloatComplex(0.0f, 0.5f); // one half as complex (imag)      
-
-        // FIRST ORDER TERM //
-
-        // some terms we want
-        cuFloatComplex Az = my_cuCmulf(make_cuFloatComplex(alpha_z, 0.0f), M_loc_z[idx]); // coefficient a_z^i, no gamma
-        cuFloatComplex Ax = make_cuFloatComplex(__fmul_rn(0.5f, __fmul_rn(__fadd_rn(alpha_x, alpha_y), Mx)), 0.0f); // (1/2)*(alpha_x + alpha_y)*Mx
-        cuFloatComplex Ay = make_cuFloatComplex(__fmul_rn(0.5f, __fmul_rn(__fadd_rn(alpha_x, alpha_y), My)), 0.0f); // (1/2)*(alpha_x + alpha_y)*My
-
-        // some more terms
-        cuFloatComplex axm = make_cuFloatComplex(__fmul_rn(0.5f, __fmul_rn(__fsub_rn(alpha_x, alpha_y), Mx)), 0.0f); // (1/2)*(alpha_x - alpha_y)*Mx
-        cuFloatComplex aym = make_cuFloatComplex(__fmul_rn(0.5f, __fmul_rn(__fsub_rn(alpha_x, alpha_y), My)), 0.0f); // (1/2)*(alpha_x - alpha_y)*My
-        cuFloatComplex dvpAz = my_cuCaddf(make_cuFloatComplex(dv, 0.0f), Az);
-        
-        // initialize to zero
-        H[DIM_H * DIM_H * idx] = make_cuFloatComplex(0,0);
-        H[DIM_H * DIM_H * idx + 1] = make_cuFloatComplex(0,0);
-        H[DIM_H * DIM_H * idx + 2] = make_cuFloatComplex(0,0);
-        H[DIM_H * DIM_H * idx + 3] = make_cuFloatComplex(0,0);
-
-        // subtact (dv + Az)Iz
-        H[DIM_H * DIM_H * idx] = my_cuCsubf(H[DIM_H * DIM_H * idx], my_cuCmulf(rp5, dvpAz)); // (1/2)*(dv + Az)
-        H[DIM_H * DIM_H * idx + 3] = my_cuCaddf(H[DIM_H * DIM_H * idx + 3], my_cuCmulf(rp5, dvpAz)); // -(1/2)*(dv + Az)
-        
-        // subtract AxIx
-        H[DIM_H * DIM_H * idx + 1] = my_cuCsubf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(rp5, Ax)); // (1/2)*Ax
-        H[DIM_H * DIM_H * idx + 2] = my_cuCsubf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(rp5, Ax)); // (1/2)*Ax
-
-        // subtract AyIy
-        H[DIM_H * DIM_H * idx + 1] = my_cuCaddf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(ip5, Ay)); // -(i/2)*Ay
-        H[DIM_H * DIM_H * idx + 2] = my_cuCsubf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(ip5, Ay)); // (i/2)*Ay
-
-        // SECOND ORDER TERM //
-
-        // coefficients
-        cuFloatComplex Bx = my_cuCmulf(make_cuFloatComplex(__fdiv_rn(1.0f, __fmul_rn(2.0f, v0)), 0.0f), my_cuCmulf(dvpAz, axm)); // (1/2v)*(dv + Az)*(axm)
-        cuFloatComplex By = my_cuCmulf(make_cuFloatComplex(__fdiv_rn(1.0f, __fmul_rn(2.0f, v0)), 0.0f), my_cuCmulf(dvpAz, aym)); // (1/2v)*(dv + Az)*(aym)
-        cuFloatComplex Bz = my_cuCmulf(make_cuFloatComplex(__fdiv_rn(1.0f, __fmul_rn(8.0f, v0)), 0.0f), // (1/8v)
-                                my_cuCsubf(
-                                    my_cuCmulf(aym, 
-                                        make_cuFloatComplex(__fmul_rn(__fadd_rn(__fmul_rn(3.0f, alpha_x), alpha_y), My), 0.0f)), // aym * (3*alpha_x + alpha_y) * My
-                                    my_cuCmulf(axm, 
-                                        make_cuFloatComplex(__fmul_rn(__fadd_rn(__fmul_rn(3.0f, alpha_y), alpha_x), Mx), 0.0f)) // axm * (3*alpha_y + alpha_x) * Mx
-                                        ));
-
-        // add BzIz
-        H[DIM_H * DIM_H * idx] = my_cuCaddf(H[DIM_H * DIM_H * idx], my_cuCmulf(rp5, Bz)); // (1/2)*Bz
-        H[DIM_H * DIM_H * idx + 3] = my_cuCsubf(H[DIM_H * DIM_H * idx + 3], my_cuCmulf(rp5, Bz)); // -(1/2)*Bz
-        
-        // add BxIx
-        H[DIM_H * DIM_H * idx + 1] = my_cuCaddf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(rp5, Bx)); // (1/2)*Bx
-        H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(rp5, Bx)); // (1/2)*Bx
-
-        // add ByIy
-        H[DIM_H * DIM_H * idx + 1] = my_cuCsubf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(ip5, By)); // -(i/2)*By
-        H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(ip5, By)); // (i/2)*By
+            H[DIM_H * DIM_H * idx + 1] = my_cuCsubf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(ip5, By)); // -(i/2)*By
+            H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(ip5, By)); // (i/2)*By
 
         // THIRD ORDER TERM //
-        
-        // some helpful terms
-        cuFloatComplex coef = make_cuFloatComplex(__fdiv_rn(1.0f, __fmul_rn(64.0f, __fmul_rn(v0, v0))), 0.0f); // 1/(16*(2v0)^2)
-        float axmay = __fsub_rn(alpha_x, alpha_y);                                          // alpha_x - alpha_y
-        float ax5ay = __fadd_rn(__fmul_rn(5.0f, alpha_y), alpha_x);                         // 5*alpha_y + alpha_x
-        float ay5ax = __fadd_rn(__fmul_rn(5.0f, alpha_x), alpha_y);                         // 5*alpha_x + alpha_y
-        float xpoly = __fadd_rn(__fmul_rn(5.0f, __fmul_rn(alpha_x, alpha_x)),               // 5*alpha_x^2
-                            __fadd_rn(__fmul_rn(20.0f, __fmul_rn(alpha_x, alpha_y)),        // 20*alpha_x*alpha_y
-                                      __fmul_rn(7.0f, __fmul_rn(alpha_y, alpha_y))));       // 7*alpha_y^2
-        float ypoly = __fadd_rn(__fmul_rn(5.0f, __fmul_rn(alpha_y, alpha_y)),               // 5*alpha_y^2
-                            __fadd_rn(__fmul_rn(20.0f, __fmul_rn(alpha_x, alpha_y)),        // 20*alpha_x*alpha_y
-                                    __fmul_rn(7.0f, __fmul_rn(alpha_x, alpha_x))));         // 7*alpha_x^2 
-                                    
-        // intermediate terms
-        cuFloatComplex xt1 = make_cuFloatComplex(__fmul_rn(axmay, __fmul_rn(ax5ay, __fmul_rn(Mx, Mx))), 0.0f); // (alpha_x - alpha_y)*(5*alpha_y + alpha_x)*(Mx)^2
-        cuFloatComplex xt2 = make_cuFloatComplex(__fmul_rn(xpoly, __fmul_rn(My, My)), 0.0f); // (5*alpha_x^2 + 20*alpha_x*alpha_y + 7*alpha_y^2)*(My)^2
-        cuFloatComplex t3 = my_cuCmulf(make_cuFloatComplex(16.0f, 0.0f), my_cuCmulf(dvpAz, dvpAz)); // 16*(dv + az)^2
-        cuFloatComplex yt1 = make_cuFloatComplex(__fmul_rn(__fmul_rn(-1.0f, axmay), __fmul_rn(ay5ax, __fmul_rn(My, My))), 0.0f); // (alpha_x - alpha_y)*(5*alpha_x + alpha_y)*(My)^2
-        cuFloatComplex yt2 = make_cuFloatComplex(__fmul_rn(ypoly, __fmul_rn(Mx, Mx)), 0.0f); // (5*alpha_x^2 + 20*alpha_x*alpha_y + 7*alpha_y^2)*(My)^2
 
-        // coefficients
-        cuFloatComplex Cx = my_cuCmulf(coef, my_cuCmulf(axm, my_cuCaddf(xt1, my_cuCaddf(xt2, t3))));
-        cuFloatComplex Cy = my_cuCmulf(make_cuFloatComplex(-1.0f, 0.0f), my_cuCmulf(coef, my_cuCmulf(aym, my_cuCaddf(yt1, my_cuCaddf(yt2, t3)))));
-        cuFloatComplex Cz = my_cuCmulf(my_cuCmulf(dvpAz, make_cuFloatComplex(__fdiv_rn(1.0f, __fmul_rn(__fmul_rn(2.0f, v0), __fmul_rn(2.0f, v0))), 0.0f)), // (dv + Az)/(2v)^2
-                        my_cuCsubf(my_cuCaddf(my_cuCmulf(make_cuFloatComplex(2.0f, 0.0f), my_cuCmulf(axm, aym)), my_cuCmulf(axm, Ay)), my_cuCmulf(Ax, aym))); // 2*a_x-*a_y- + a_x-*a_y+ - a_x+*a_y-
+            // terms we need, broken up
+            cuFloatComplex Pw2 = my_cuCsubf(my_cuCmulf(cuConjf(wp), cuConjf(wp)), my_cuCaddf(my_cuCmulf(wp, wp), my_cuCmulf(my_cuCmulf(wp, cuConjf(wp)), make_cuFloatComplex(eta, 0.0f))));
+            cuFloatComplex Qw = my_cuCsubf(my_cuCmulf(wp, wp), my_cuCmulf(my_cuCmulf(wp, cuConjf(wp)), make_cuFloatComplex(__fmul_rn(2.0f, eta), 0.0f)));
+            cuFloatComplex d_p = make_cuFloatComplex(__fmul_rn(__fmul_rn(v0, v0), 128.0f), 0.0f);
+            cuFloatComplex d_z = make_cuFloatComplex(__fmul_rn(__fmul_rn(v0, v0), 32.0f), 0.0f);
+            cuFloatComplex n_p1 = my_cuCmulf(make_cuFloatComplex(__fmul_rn(alpha, eta), 0.0f), make_cuFloatComplex(__fmul_rn(16.0f, __fmul_rn(dv_az, dv_az)), 0.0f));
+            cuFloatComplex n_p2 = my_cuCmulf(make_cuFloatComplex(__fmul_rn(alpha, eta), 0.0f), my_cuCmulf(make_cuFloatComplex(__fmul_rn(2.0f, alpha2), 0.0f), Pw2));
+            cuFloatComplex n_p3 = my_cuCmulf(make_cuFloatComplex(__fmul_rn(alpha, eta), 0.0f), my_cuCmulf(make_cuFloatComplex(__fmul_rn(eta, alpha2), 0.0f), Qw));
+            cuFloatComplex n_z1 = make_cuFloatComplex(__fmul_rn(-1.0f, __fmul_rn(alpha2, dv_az)), 0.0f);
+            cuFloatComplex n_z2 = my_cuCaddf(my_cuCmulf(cuConjf(wp), cuConjf(wp)), Qw);
 
-        // add CzIz
-        H[DIM_H * DIM_H * idx] = my_cuCaddf(H[DIM_H * DIM_H * idx], my_cuCmulf(rp5, Cz)); // (1/2)*Cz
-        H[DIM_H * DIM_H * idx + 3] = my_cuCsubf(H[DIM_H * DIM_H * idx + 3], my_cuCmulf(rp5, Cz)); // -(1/2)*Cz
-        
-        // add CxIx
-        H[DIM_H * DIM_H * idx + 1] = my_cuCaddf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(rp5, Cx)); // (1/2)*Cx
-        H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(rp5, Cx)); // (1/2)*Cx
+            // actual terms
+            cuFloatComplex Cz = my_cuCdivf(my_cuCmulf(n_z1, n_z2), d_z);
+            cuFloatComplex Cx = my_cuCdivf(my_cuCaddf(n_p1, my_cuCsubf(n_p3, n_p2)), d_p);
+            cuFloatComplex Cy = my_cuCmulf(make_cuFloatComplex(-1.0f, 0.0), my_cuCdivf(my_cuCaddf(n_p1, my_cuCaddf(n_p3, n_p2)), d_p));
 
-        // add CyIy
-        H[DIM_H * DIM_H * idx + 1] = my_cuCsubf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(ip5, Cy)); // -(i/2)*Cy
-        H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(ip5, Cy)); // (i/2)*Cy
-        
+            // multiply z term by 1/2 and add (11), subtract (22)
+            H[DIM_H * DIM_H * idx]     = my_cuCaddf(H[DIM_H * DIM_H * idx], my_cuCmulf(rp5, Cz)); // (1/2)*Cz
+            H[DIM_H * DIM_H * idx + 3] = my_cuCsubf(H[DIM_H * DIM_H * idx + 3], my_cuCmulf(rp5, Cz)); // -(1/2)*Cz
+            
+            // multiply x term by 1/2 and add (12), (21)
+            H[DIM_H * DIM_H * idx + 1] = my_cuCaddf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(rp5, Cx)); // (1/2)*Cx
+            H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(rp5, Cx)); // (1/2)*Cx
+
+            // multiply y term by i/2 and sub (12), add (21)
+            H[DIM_H * DIM_H * idx + 1] = my_cuCsubf(H[DIM_H * DIM_H * idx + 1], my_cuCmulf(ip5, Cy)); // -(i/2)*Cy
+            H[DIM_H * DIM_H * idx + 2] = my_cuCaddf(H[DIM_H * DIM_H * idx + 2], my_cuCmulf(ip5, Cy)); // (i/2)*Cy
+
     }
 }
-*/
 
 __global__ void calc_M_eval_2D(cuFloatComplex* rho, cuFloatComplex* M_eval, cuFloatComplex* Mz_eval, int nf)
 {
