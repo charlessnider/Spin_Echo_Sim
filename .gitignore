@@ -1,0 +1,3 @@
+build.sh
+cuda/*.txt
+cuda/spinsim
