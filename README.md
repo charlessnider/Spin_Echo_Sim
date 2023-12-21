@@ -31,7 +31,7 @@ Time propagation is done in Liouville space using a discrete time-stepping metho
 
 $\rho(t+dt) = exp(-iL(t)dt/\hbar)\rho(t)$
 
-The Liouvillian operator $L$ is calculated from the Hamiltonian via $L = H \otimes I - I \otimes \bar{H}$.  Matrix exponentiation of the Liouvillian is performed using the scaling and squaring method.  A built-in matrix exponential function is not present in `CUDA` nor its linear algebra libraries i.e. `cuBLAS`  or `cuSolver`, so a custom algorithm was written for this simulation.  The key step of solving for the Pad\{'e} Approximant $R \approx exp(A)$ for $A = -iLdt/\hbar$ in $QR = P$ was done using a simple Gaussian Elimination algorithm.  Because the simulation deals with matrices which are at most $4 \times 4$, the extreme scaling of the Gaussian Elimination algorithm is not a significant factor in performance.
+The Liouvillian operator $L$ is calculated from the Hamiltonian via $L = H \otimes I - I \otimes \bar{H}$.  Matrix exponentiation of the Liouvillian is performed using the scaling and squaring method.  A built-in matrix exponential function is not present in `CUDA` nor its linear algebra libraries i.e. `cuBLAS`  or `cuSolver`, so a custom algorithm was written for this simulation.  The key step of solving for the Pade Approximant $R \approx exp(A)$ for $A = -iLdt/\hbar$ in $QR = P$ was done using a simple Gaussian Elimination algorithm.  Because the simulation deals with matrices which are at most $4 \times 4$, the extreme scaling of the Gaussian Elimination algorithm is not a significant factor in performance.
 
 ## Using the CUDA Simulation
 
