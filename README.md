@@ -64,7 +64,7 @@ The simulation code can be compiled with the `CUDA` compiler, e.g. `nvcc spin_ec
 
 `./spinsim <n> 0 0 0 0`
 
-It is important to note that setting "resample requencies" to 0 **requires the presence of a** `freqs.txt` **file with the pre-generated frequency distribution in it.  The simulation will not work without a pre-generated distribution if "resample frequencies" is set to 0.**
+It is important to note that setting "resample requencies" to 0 **requires the presence of a** `freqs.txt` **file** with a pre-generated frequency distribution in it.  The simulation _**will not work**_ without a pre-generated distribution if "resample frequencies" is set to 0.
 
 The outputs of the `CUDA` simulation are `.txt` files which, on each line, contain the signal (i.e. net magnetization) of the ensemble vs time for a given parameter set, e.g. the 1st row of the output contains the net magnetization vs time (space delimited) for the 1st set of `spin_params` and first set of `echo_params`.  The 2nd row corresponds to the 1st set of `spin_params` and second set of `echo_params`, and so on.
 
