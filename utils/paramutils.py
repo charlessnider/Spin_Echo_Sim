@@ -80,7 +80,7 @@ def make_param_file(params, load_order, filename, trial_idx=1, paired=None):
         result.append(output)
 
     # print to the output file
-    ofile = Path(os.path.join(Path(__file__).parent.parent, "params", f"{filename}{trial_idx}.txt"))
+    ofile = Path(os.path.join(Path(__file__).parent.parent, "cuda", f"{filename}{trial_idx}.txt"))
     with open(ofile, "w+") as f:
         for line in result:
             f.write(" ".join(line))
