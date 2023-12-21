@@ -2,7 +2,7 @@
 
 To use the example...
 * Copy the parameter files in `params` to the directory from which you will run the simulation (e.g. `Spin_Echo_Sim/cuda`).
-* Run the simulation _with resample frequencies set to true_
+* Run the simulation _with resample frequencies set to true_ (a `freqs.txt` file is not supplied in this repo, as they tend to be very large-- if resample frequencies is not set to true, _**the simulation will not work**_):
 ```
 > nvcc spin_echo_sim_new.cu -o spinsim
 > ./spinsim 1 0 0 1 0
