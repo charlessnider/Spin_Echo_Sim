@@ -6,7 +6,9 @@ The simulation uses `CUDA` simulate large ($n\approx 10,000 - 100,000$) spin $1/
 
 The code as written (`spin_echo_sim_new.cu`) is hard-coded with the current simulation in mind (i.e. the current ensemble type and Hamiltonian), but with moderate effort can be updated to model other mean-field type Hamiltonians.
 
-Included in the repository is the `CUDA` simulation (`spin_echo_sim_new.cu`), two `Julia` versions (`SpinEchoSim_cpu.jl` and `SpinEchoSim_gpu.jl`) which represent CPU and hybrid CPU/GPU versions of the simulation, and several utilities for the generation of parameter files for all three simulation variants.  The main focus of these notes is the `CUDA` variant, as the other two variants are primarily used for benchmarking the performance of the `CUDA` simulation.
+Included in the repository is the `CUDA` simulation (`spin_echo_sim_new.cu`), two `Julia` versions (`SpinEchoSim_cpu.jl` and `SpinEchoSim_gpu.jl`) which represent CPU and hybrid CPU/GPU versions of the simulation, and several utilities for the generation of parameter files for the `CUDA` simulation (`/utils/Generate Parameters.ipynb`), as well an example (see `/example/README.md`) with sample data (`/example/std_output`) and an analysis notebook (`/example/Analyze Ecoes.ipynb`).  The main focus of these notes is the `CUDA` variant, as the other two variants are primarily used for benchmarking the performance of the `CUDA` simulation.
+
+The `CUDA` simulation was last tested on `CUDA` version 12.3 on 21 December 2023 on a GTX 1080 Ti, at which time the example data was generated.  The Julia simulation, mostly used for benchmarking, was last tested in the spring of 2022.
 
 ### Interaction
 
